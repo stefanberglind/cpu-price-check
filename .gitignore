@@ -1,0 +1,10 @@
+# generated at runtime
+price_history.json
+passmark_raw.json
+cron.log
+prices-*.csv
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
