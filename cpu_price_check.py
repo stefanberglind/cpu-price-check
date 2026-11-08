@@ -196,6 +196,24 @@ def parse_products(dom: str) -> list[dict]:
     return products
 
 
+def dedupe_products(products: list[dict]) -> list[dict]:
+    """One row per CPU model: idealo lists tray/boxed/OEM/anniversary
+    packagings as separate tiles, and normalize_model() collapses them to the
+    same name. Keep the cheapest variant (ties broken by more offers)."""
+    best: dict[str, dict] = {}
+    for p in products:
+        cur = best.get(p["model"])
+        if cur is None:
+            best[p["model"]] = p
+            continue
+        pk, ck = p["price"], cur["price"]
+        if pk is not None and (ck is None or pk < ck):
+            best[p["model"]] = p
+        elif pk == ck and (p["offers"] or 0) > (cur["offers"] or 0):
+            best[p["model"]] = p
+    return list(best.values())
+
+
 # ---------------------------------------------------------------------------
 # PassMark database
 # ---------------------------------------------------------------------------
@@ -404,6 +422,7 @@ def main() -> int:
         sys.exit("error: parsed 0 products; idealo layout may have changed.")
     if args.min_offers:
         products = [p for p in products if (p["offers"] or 0) >= args.min_offers]
+    products = dedupe_products(products)
 
     db = load_benchmarks()
     attach_benchmarks(products, db)

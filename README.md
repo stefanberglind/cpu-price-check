@@ -4,8 +4,10 @@ Weekly snapshot of **Socket AM4 CPU prices on idealo.de**, enriched with
 PassMark scores, printed as a price / performance-per-EUR table. Each run
 saves a price snapshot so the next run shows a `Δ€` column.
 
-Built for a B450 (AM4, DDR4) system, but the table lists **every** CPU on the
-first page of idealo's AM4 category — new models appear automatically.
+Built for a B450 (AM4, DDR4) system. The table covers every CPU on the first
+page of idealo's AM4 category (new models appear automatically), collapsed to
+**one row per model** — idealo's tray/boxed/OEM/anniversary packagings of the
+same chip are merged, keeping the cheapest.
 
 ## Files
 
