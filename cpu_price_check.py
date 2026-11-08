@@ -8,9 +8,10 @@ price / performance-per-EUR table and records a price snapshot so weekly runs
 show price deltas.
 
 Typical use:
-    ./cpu_price_check.py                 # fetch idealo, print table, save snapshot
+    ./cpu_price_check.py                 # best upgrade value first (default)
     ./cpu_price_check.py --csv out.csv    # also write CSV
-    ./cpu_price_check.py --sort value     # price|value|multi|single|name
+    ./cpu_price_check.py --sort price     # price|value|multi|single|name
+    ./cpu_price_check.py --all            # include non-upgrades too
     ./cpu_price_check.py --html page.html # parse a saved DOM (no network)
 
 Benchmarks are static (passmark_db.json) so weekly runs are fast and never
@@ -376,9 +377,11 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--url", default=DEFAULT_URL, help="idealo category URL")
     ap.add_argument("--html", help="parse a saved DOM file instead of fetching")
-    ap.add_argument("--sort", default="price",
+    ap.add_argument("--sort", default="value",
                     choices=["price", "value", "multi", "single", "name"],
-                    help="sort order (default: price ascending)")
+                    help="sort order (default: value = best Extra/€ first)")
+    ap.add_argument("--all", action="store_true",
+                    help="also show CPUs that do not outperform the current one")
     ap.add_argument("--csv", help="write the table to a CSV file")
     ap.add_argument("--json", help="write the raw snapshot to a JSON file")
     ap.add_argument("--min-offers", type=int, default=0,
@@ -426,9 +429,14 @@ def main() -> int:
     }
 
     rows = build_rows(products, baseline)
+    b_mark = baseline.get("mark") or BASELINE_FALLBACK["mark"]
+    if not args.all:
+        rows = [r for r in rows
+                if r["multi"] is None or r["multi"] >= b_mark]
     sorters = {
         "price": lambda r: (r["price"] is None, r["price"] or 0),
-        "value": lambda r: (r["mark_per_eur"] is None, -(r["mark_per_eur"] or 0)),
+        "value": lambda r: (r["extra_per_eur"] is None,
+                            -(r["extra_per_eur"] or 0), r["price"] or 0),
         "multi": lambda r: (r["multi"] is None, -(r["multi"] or 0)),
         "single": lambda r: (r["single"] is None, -(r["single"] or 0)),
         "name": lambda r: r["model"].lower(),

@@ -27,8 +27,9 @@ first page of idealo's AM4 category — new models appear automatically.
 ## Usage
 
 ```sh
-./cpu_price_check.py                 # fetch idealo, print table, save snapshot
-./cpu_price_check.py --sort value     # best performance/€ first
+./cpu_price_check.py                 # fetch idealo, best upgrade value first
+./cpu_price_check.py --sort price     # cheapest first (value|price|multi|single|name)
+./cpu_price_check.py --all            # also show CPUs that are not upgrades
 ./cpu_price_check.py --csv prices.csv # also write CSV (semicolon-separated)
 ./cpu_price_check.py --json snap.json # also write raw JSON
 ./cpu_price_check.py --min-offers 10  # hide thin listings
@@ -36,7 +37,10 @@ first page of idealo's AM4 category — new models appear automatically.
 ./cpu_price_check.py --refresh-benchmarks   # update PassMark DB (node + Chrome)
 ```
 
-`--sort` is one of `price` (default), `value`, `multi`, `single`, `name`.
+By default the table hides any CPU that does not beat the current Ryzen 5 3600
+(17,645 multithread mark); pass `--all` to see everything. `--sort` is one of
+`value` (default), `price`, `multi`, `single`, `name`. The `value` order ranks
+by **Extra/€** — mark points gained over the 3600 per euro spent — highest first.
 
 ### Columns
 
@@ -46,7 +50,7 @@ first page of idealo's AM4 category — new models appear automatically.
 - **Mark / Single** — PassMark CPU Mark (multithread) / single-thread
 - **Mark/€** — raw efficiency (Mark ÷ price)
 - **vs3600** — multithread vs your Ryzen 5 3600 (17,645 mark)
-- **Extra/€** — upgrade value: `(Mark − 17,645) ÷ price`
+- **Extra/€** — upgrade value: `(Mark − 17,645) ÷ price` (default sort key)
 - **Δ€** — price change vs the previous saved run
 
 ## Weekly cron
