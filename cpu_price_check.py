@@ -89,7 +89,9 @@ def fetch_idealo_html(url: str, timeout: int = 28) -> str:
     finally:
         shutil.rmtree(profile, ignore_errors=True)
     dom = proc.stdout
-    if "sr-resultItemTile" not in dom:
+    if not any(marker in dom for marker in (
+            'data-testid="result-item"', "sr-resultItemTile",
+            "sr-resultList__item_")):
         sys.exit("error: idealo page did not contain product tiles "
                  "(blocked or layout changed). Try again or use --html.")
     return dom
@@ -121,78 +123,108 @@ def normalize_model(title: str) -> str:
     return name
 
 
-def parse_products(dom: str) -> list[dict]:
-    products: list[dict] = []
-    pieces = re.split(r"sr-resultList__item_", dom)
-    for piece in pieces[1:]:
-        link = re.search(
-            r'OffersOfProduct/(\d+)_[^"]*"[^>]*>\s*'
-            r'<div[^>]*sr-productSummary__title[^>]*>(.*?)</div>', piece, re.S)
-        if not link:
-            continue
-        pid = link.group(1)
-        title = clean_text(link.group(2))
+def _parse_tile(piece: str) -> dict | None:
+    """Parse one product tile (current data-testid layout or old sr-* one)."""
+    link = re.search(r"OffersOfProduct/(\d+)", piece)
+    if not link:
+        return None
+    pid = link.group(1)
 
-        price_m = re.search(r'sr-detailedPriceInfo__price_[^"]*">(.*?)</div>',
-                            piece, re.S)
-        price = parse_price(clean_text(price_m.group(1))) if price_m else None
+    title_m = (
+        re.search(r'data-testid="product-summary-title"[^>]*>(.*?)</div>',
+                  piece, re.S)
+        or re.search(r'sr-productSummary__title[^>]*>(.*?)</div>', piece, re.S)
+    )
+    if not title_m:
+        return None
+    title = clean_text(title_m.group(1))
 
-        offers_m = re.search(r'sr-detailedPriceInfo__offerCount_[^"]*">\s*(\d+)',
-                             piece)
-        offers = int(offers_m.group(1)) if offers_m else None
+    price_m = (
+        re.search(r'data-testid="detailed-price-info-price"[^>]*>(.*?)</div>',
+                  piece, re.S)
+        or re.search(r'sr-detailedPriceInfo__price_[^"]*">(.*?)</div>',
+                     piece, re.S)
+    )
+    price = parse_price(clean_text(price_m.group(1))) if price_m else None
 
-        desc_m = re.search(r'sr-productSummary__description[^>]*>(.*?)</div>',
-                           piece, re.S)
-        desc = clean_text(desc_m.group(1)) if desc_m else ""
+    offers_m = (
+        re.search(r">\s*(\d+)\s*Angebote?\s*<", piece)
+        or re.search(r'sr-detailedPriceInfo__offerCount_[^"]*">\s*(\d+)', piece)
+    )
+    offers = int(offers_m.group(1)) if offers_m else None
 
-        cores = None
-        m = re.search(r"Anzahl Prozessorkerne\s*(\d+)", desc)
+    desc_m = re.search(r'sr-productSummary__description[^>]*>(.*?)</div>',
+                       piece, re.S)
+    if desc_m:
+        desc = clean_text(desc_m.group(1))
+    else:
+        desc = ""
+        for block in re.findall(r"<p\b[^>]*>(.*?)</p>", piece, re.S):
+            text = clean_text(block)
+            if "Kern Prozessor" in text or "Anzahl Prozessorkerne" in text:
+                desc = text
+                break
+
+    cores = None
+    m = re.search(r"Anzahl Prozessorkerne\s*(\d+)", desc)
+    if m:
+        cores = int(m.group(1))
+    else:
+        m = re.search(r"(\d+)\s*Kern Prozessor", desc)
         if m:
             cores = int(m.group(1))
         else:
-            m = re.search(r"(\d+)\s*Kern Prozessor", desc)
-            if m:
-                cores = int(m.group(1))
-            else:
-                word = re.search(r"(Dual|Quad|Hexa|Octa)-Core", desc, re.I)
-                if word:
-                    cores = {"dual": 2, "quad": 4, "hexa": 6, "octa": 8}[
-                        word.group(1).lower()]
+            word = re.search(r"(Dual|Quad|Hexa|Octa)-Core", desc, re.I)
+            if word:
+                cores = {"dual": 2, "quad": 4, "hexa": 6, "octa": 8}[
+                    word.group(1).lower()]
 
-        threads = None
-        m = re.search(r"Anzahl Threads\s*(\d+)", desc)
-        if m:
-            threads = int(m.group(1))
+    threads = None
+    m = re.search(r"Anzahl Threads\s*(\d+)", desc)
+    if m:
+        threads = int(m.group(1))
 
-        tdp = None
-        m = re.search(r"(\d+)\s*Watt", desc)
-        if m:
-            tdp = int(m.group(1))
+    tdp = None
+    m = re.search(r"(\d+)\s*Watt", desc)
+    if m:
+        tdp = int(m.group(1))
 
-        socket = None
-        m = re.search(r"Sockel\s+([A-Za-z0-9+/]+)", desc)
-        if m:
-            socket = m.group(1)
+    socket = None
+    m = re.search(r"Sockel\s+([A-Za-z0-9+/]+)", desc)
+    if m:
+        socket = m.group(1)
 
-        cooler = None
-        if re.search(r"ohne K.hler", desc):
-            cooler = "no"
-        elif re.search(r"mit K.hler", desc):
-            cooler = "yes"
+    cooler = None
+    if re.search(r"ohne K.hler", desc):
+        cooler = "no"
+    elif re.search(r"mit K.hler", desc):
+        cooler = "yes"
 
-        products.append({
-            "id": pid,
-            "title": title,
-            "model": normalize_model(title),
-            "price": price,
-            "offers": offers,
-            "cores": cores,
-            "threads": threads,
-            "tdp": tdp,
-            "socket": socket,
-            "cooler": cooler,
-            "url": f"https://www.idealo.de/preisvergleich/OffersOfProduct/{pid}",
-        })
+    return {
+        "id": pid,
+        "title": title,
+        "model": normalize_model(title),
+        "price": price,
+        "offers": offers,
+        "cores": cores,
+        "threads": threads,
+        "tdp": tdp,
+        "socket": socket,
+        "cooler": cooler,
+        "url": f"https://www.idealo.de/preisvergleich/OffersOfProduct/{pid}",
+    }
+
+
+def parse_products(dom: str) -> list[dict]:
+    if 'data-testid="result-item"' in dom:
+        pieces = re.split(r'data-testid="result-item"', dom)[1:]
+    else:
+        pieces = re.split(r"sr-resultList__item_", dom)[1:]
+    products: list[dict] = []
+    for piece in pieces:
+        row = _parse_tile(piece)
+        if row:
+            products.append(row)
     return products
 
 
@@ -505,9 +537,10 @@ def main() -> int:
         print(f"# wrote {args.csv}", file=sys.stderr)
 
     if args.json:
+        out_rows = [{**r, "delta": deltas.get(r["model"])} for r in rows]
         with open(args.json, "w", encoding="utf-8") as fh:
-            json.dump({"date": stamp, "baseline": baseline, "rows": rows}, fh,
-                      indent=2, ensure_ascii=False)
+            json.dump({"date": stamp, "baseline": baseline, "rows": out_rows},
+                      fh, indent=2, ensure_ascii=False)
         print(f"# wrote {args.json}", file=sys.stderr)
 
     return 0

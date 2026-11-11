@@ -55,15 +55,41 @@ by **Extra/€** — mark points gained over the 3600 per euro spent — highest
 - **Extra/€** — upgrade value: `(Mark − 17,645) ÷ price` (default sort key)
 - **Δ€** — price change vs the previous saved run
 
-## Weekly cron
+## Weekly cron + email
 
-Run it every Monday at 08:00 and append to a log:
+`mail_report.py` runs the checker and emails the table over SMTP (stdlib only,
+no MTA needed). Configure it in `mail.conf` (chmod 600, gitignored) using
+`mail.conf.example` as the template:
 
-```cron
-0 8 * * 1  cd /home/stefan/cpu-price-check && ./cpu_price_check.py --csv "prices-$(date +\%F).csv" >> cron.log 2>&1
+```json
+{
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "starttls": true,
+  "username": "you@gmail.com",
+  "password": "GMAIL_APP_PASSWORD",
+  "from": "you@gmail.com",
+  "to": "you@gmail.com"
+}
 ```
 
-(`%` must be escaped as `\%` in crontab.) Open `cron.log` to read the table.
+For Gmail, `password` must be an **App Password** (Google account → Security →
+2-Step Verification → App passwords), not your normal login. Any SMTP provider
+works; use `"ssl": true` for implicit TLS on port 465 instead of STARTTLS.
+
+Test without sending:
+
+```sh
+./mail_report.py --dry-run
+```
+
+Crontab (Monday and Wednesday at 18:00 local time):
+
+```cron
+0 18 * * 1,3 cd /home/stefan/cpu-price-check && /usr/bin/python3 mail_report.py >> /home/stefan/cpu-price-check/cron.log 2>&1
+```
+
+Check `cron.log` if no mail arrives.
 
 ## Notes / design
 

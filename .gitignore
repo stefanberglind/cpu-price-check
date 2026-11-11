@@ -8,3 +8,9 @@ prices-*.csv
 __pycache__/
 *.py[cod]
 .venv/
+
+# local mail config (secrets)
+mail.conf
+
+# email preview
+last_email.html
